@@ -1,17 +1,17 @@
 body {
   margin: 0;
-  font-family: system-ui, sans-serif;
   background: #111;
   color: white;
+  font-family: system-ui, sans-serif;
   text-align: center;
-}
-
-h1 {
-  margin: 16px;
 }
 
 canvas {
   width: 100vw;
   height: 80vh;
   display: block;
+}
+
+h1 {
+  margin: 16px;
 }
