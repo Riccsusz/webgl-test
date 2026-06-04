@@ -1,0 +1,16 @@
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #111;
+  color: white;
+}
+
+h1 {
+  padding: 16px;
+}
+
+canvas {
+  width: 100vw;
+  height: 70vh;
+  display: block;
+}
