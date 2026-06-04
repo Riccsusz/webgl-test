@@ -3,9 +3,9 @@ const gl = canvas.getContext("webgl");
 
 if (!gl) {
   alert("WebGL is not supported in this browser.");
+  throw new Error("WebGL not supported");
 }
 
-// Vertex shader
 const vertexShaderSource = `
 attribute vec3 aPosition;
 attribute vec3 aColor;
@@ -20,7 +20,6 @@ void main() {
 }
 `;
 
-// Fragment shader
 const fragmentShaderSource = `
 precision mediump float;
 
@@ -31,21 +30,21 @@ void main() {
 }
 `;
 
-function createShader(gl, type, source) {
+function createShader(type, source) {
   const shader = gl.createShader(type);
   gl.shaderSource(shader, source);
   gl.compileShader(shader);
 
   if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-    console.error(gl.getShaderInfoLog(shader));
+    const error = gl.getShaderInfoLog(shader);
     gl.deleteShader(shader);
-    return null;
+    throw new Error(error);
   }
 
   return shader;
 }
 
-function createProgram(gl, vertexShader, fragmentShader) {
+function createProgram(vertexShader, fragmentShader) {
   const program = gl.createProgram();
 
   gl.attachShader(program, vertexShader);
@@ -53,50 +52,50 @@ function createProgram(gl, vertexShader, fragmentShader) {
   gl.linkProgram(program);
 
   if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-    console.error(gl.getProgramInfoLog(program));
+    const error = gl.getProgramInfoLog(program);
     gl.deleteProgram(program);
-    return null;
+    throw new Error(error);
   }
 
   return program;
 }
 
-const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
-const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
-const program = createProgram(gl, vertexShader, fragmentShader);
+const vertexShader = createShader(gl.VERTEX_SHADER, vertexShaderSource);
+const fragmentShader = createShader(gl.FRAGMENT_SHADER, fragmentShaderSource);
+const program = createProgram(vertexShader, fragmentShader);
 
-// A 3D pyramid made from triangles.
-// Each vertex: x, y, z, r, g, b
 const vertices = new Float32Array([
-  // Front face
+  // x, y, z,       r, g, b
+
+  // front
    0.0,  0.8,  0.0,   1.0, 0.2, 0.2,
   -0.7, -0.6,  0.7,   1.0, 0.2, 0.2,
    0.7, -0.6,  0.7,   1.0, 0.2, 0.2,
 
-  // Right face
+  // right
    0.0,  0.8,  0.0,   0.2, 1.0, 0.2,
    0.7, -0.6,  0.7,   0.2, 1.0, 0.2,
    0.7, -0.6, -0.7,   0.2, 1.0, 0.2,
 
-  // Back face
+  // back
    0.0,  0.8,  0.0,   0.2, 0.4, 1.0,
    0.7, -0.6, -0.7,   0.2, 0.4, 1.0,
   -0.7, -0.6, -0.7,   0.2, 0.4, 1.0,
 
-  // Left face
+  // left
    0.0,  0.8,  0.0,   1.0, 1.0, 0.2,
   -0.7, -0.6, -0.7,   1.0, 1.0, 0.2,
   -0.7, -0.6,  0.7,   1.0, 1.0, 0.2,
 
-  // Bottom face, triangle 1
+  // bottom 1
   -0.7, -0.6,  0.7,   0.7, 0.7, 0.7,
+   0.7, -0.6, -0.7,   0.7, 0.7, 0.7,
   -0.7, -0.6, -0.7,   0.7, 0.7, 0.7,
-   0.7, -0.6, -0.7,   0.7, 0.7, 0.7,
 
-  // Bottom face, triangle 2
+  // bottom 2
   -0.7, -0.6,  0.7,   0.7, 0.7, 0.7,
-   0.7, -0.6, -0.7,   0.7, 0.7, 0.7,
    0.7, -0.6,  0.7,   0.7, 0.7, 0.7,
+   0.7, -0.6, -0.7,   0.7, 0.7, 0.7,
 ]);
 
 const buffer = gl.createBuffer();
@@ -109,14 +108,7 @@ const uMatrix = gl.getUniformLocation(program, "uMatrix");
 
 const stride = 6 * Float32Array.BYTES_PER_ELEMENT;
 
-gl.vertexAttribPointer(
-  aPosition,
-  3,
-  gl.FLOAT,
-  false,
-  stride,
-  0
-);
+gl.vertexAttribPointer(aPosition, 3, gl.FLOAT, false, stride, 0);
 gl.enableVertexAttribArray(aPosition);
 
 gl.vertexAttribPointer(
@@ -129,98 +121,66 @@ gl.vertexAttribPointer(
 );
 gl.enableVertexAttribArray(aColor);
 
-function multiplyMatrices(a, b) {
-  const result = new Float32Array(16);
-
-  for (let row = 0; row < 4; row++) {
-    for (let col = 0; col < 4; col++) {
-      result[col + row * 4] =
-        a[row * 4 + 0] * b[col + 0] +
-        a[row * 4 + 1] * b[col + 4] +
-        a[row * 4 + 2] * b[col + 8] +
-        a[row * 4 + 3] * b[col + 12];
-    }
-  }
-
-  return result;
-}
-
-function perspectiveMatrix(fieldOfViewRadians, aspect, near, far) {
-  const f = 1.0 / Math.tan(fieldOfViewRadians / 2);
-  const rangeInv = 1 / (near - far);
-
-  return new Float32Array([
-    f / aspect, 0, 0, 0,
-    0, f, 0, 0,
-    0, 0, (near + far) * rangeInv, -1,
-    0, 0, near * far * rangeInv * 2, 0
-  ]);
-}
-
-function translationMatrix(tx, ty, tz) {
-  return new Float32Array([
-    1, 0, 0, 0,
-    0, 1, 0, 0,
-    0, 0, 1, 0,
-    tx, ty, tz, 1
-  ]);
-}
-
-function rotationXMatrix(angle) {
-  const c = Math.cos(angle);
-  const s = Math.sin(angle);
-
-  return new Float32Array([
-    1, 0, 0, 0,
-    0, c, s, 0,
-    0, -s, c, 0,
-    0, 0, 0, 1
-  ]);
-}
-
-function rotationYMatrix(angle) {
-  const c = Math.cos(angle);
-  const s = Math.sin(angle);
-
-  return new Float32Array([
-    c, 0, -s, 0,
-    0, 1, 0, 0,
-    s, 0, c, 0,
-    0, 0, 0, 1
-  ]);
-}
-
 function resizeCanvas() {
   canvas.width = canvas.clientWidth;
   canvas.height = canvas.clientHeight;
   gl.viewport(0, 0, canvas.width, canvas.height);
 }
 
+function makeMatrix(angleX, angleY, aspect) {
+  const fov = Math.PI / 3;
+  const near = 0.1;
+  const far = 100.0;
+  const f = 1.0 / Math.tan(fov / 2);
+
+  const sx = Math.sin(angleX);
+  const cx = Math.cos(angleX);
+  const sy = Math.sin(angleY);
+  const cy = Math.cos(angleY);
+
+  // Combined perspective + translation + rotation matrix.
+  // Column-major order, as WebGL expects.
+  return new Float32Array([
+    (f / aspect) * cy,
+    sx * sy,
+    -cx * sy,
+    0,
+
+    0,
+    f * cx,
+    f * sx,
+    0,
+
+    (f / aspect) * sy,
+    -sx * cy,
+    cx * cy,
+    0,
+
+    0,
+    0,
+    3.0,
+    1,
+  ]);
+}
+
 window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
 
 gl.enable(gl.DEPTH_TEST);
+gl.useProgram(program);
 
 function render(time) {
   const seconds = time * 0.001;
+
+  resizeCanvas();
 
   gl.clearColor(0.05, 0.05, 0.08, 1.0);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
   const aspect = canvas.width / canvas.height;
-  const projection = perspectiveMatrix(Math.PI / 3, aspect, 0.1, 100);
-  const translation = translationMatrix(0, 0, -3.0);
-  const rotationX = rotationXMatrix(seconds * 0.7);
-  const rotationY = rotationYMatrix(seconds * 1.1);
+  const matrix = makeMatrix(seconds * 0.8, seconds * 1.2, aspect);
 
-  let matrix = projection;
-  matrix = multiplyMatrices(matrix, translation);
-  matrix = multiplyMatrices(matrix, rotationX);
-  matrix = multiplyMatrices(matrix, rotationY);
-
-  gl.useProgram(program);
   gl.uniformMatrix4fv(uMatrix, false, matrix);
-
   gl.drawArrays(gl.TRIANGLES, 0, vertices.length / 6);
 
   requestAnimationFrame(render);
