@@ -60,28 +60,40 @@ const vertexShader = createShader(gl.VERTEX_SHADER, vertexShaderSource);
 const fragmentShader = createShader(gl.FRAGMENT_SHADER, fragmentShaderSource);
 const program = createProgram(vertexShader, fragmentShader);
 
-const vertices = new Float32Array([
-  // x, y, z,        r, g, b
+gl.useProgram(program);
 
-  // front face
+// Pyramid: 4 side faces + base (2 triangles)
+// Each vertex: x, y, z, r, g, b
+const vertices = new Float32Array([
+  // Front
    0.0,  0.8,  0.0,   1.0, 0.0, 0.0,
   -0.7, -0.6,  0.7,   1.0, 0.0, 0.0,
    0.7, -0.6,  0.7,   1.0, 0.0, 0.0,
 
-  // right face
+  // Right
    0.0,  0.8,  0.0,   0.0, 1.0, 0.0,
    0.7, -0.6,  0.7,   0.0, 1.0, 0.0,
    0.7, -0.6, -0.7,   0.0, 1.0, 0.0,
 
-  // back face
-   0.0,  0.8,  0.0,   0.0, 0.3, 1.0,
-   0.7, -0.6, -0.7,   0.0, 0.3, 1.0,
-  -0.7, -0.6, -0.7,   0.0, 0.3, 1.0,
+  // Back
+   0.0,  0.8,  0.0,   0.0, 0.4, 1.0,
+   0.7, -0.6, -0.7,   0.0, 0.4, 1.0,
+  -0.7, -0.6, -0.7,   0.0, 0.4, 1.0,
 
-  // left face
+  // Left
    0.0,  0.8,  0.0,   1.0, 1.0, 0.0,
   -0.7, -0.6, -0.7,   1.0, 1.0, 0.0,
   -0.7, -0.6,  0.7,   1.0, 1.0, 0.0,
+
+  // Base triangle 1
+  -0.7, -0.6,  0.7,   0.7, 0.7, 0.7,
+  -0.7, -0.6, -0.7,   0.7, 0.7, 0.7,
+   0.7, -0.6, -0.7,   0.7, 0.7, 0.7,
+
+  // Base triangle 2
+  -0.7, -0.6,  0.7,   0.7, 0.7, 0.7,
+   0.7, -0.6, -0.7,   0.7, 0.7, 0.7,
+   0.7, -0.6,  0.7,   0.7, 0.7, 0.7,
 ]);
 
 const buffer = gl.createBuffer();
@@ -108,25 +120,22 @@ gl.vertexAttribPointer(
 gl.enableVertexAttribArray(aColor);
 
 function resizeCanvas() {
-  const width = canvas.clientWidth || 600;
-  const height = canvas.clientHeight || 400;
-
-  canvas.width = width;
-  canvas.height = height;
-
+  canvas.width = canvas.clientWidth;
+  canvas.height = canvas.clientHeight;
   gl.viewport(0, 0, canvas.width, canvas.height);
 }
 
+// Column-major 4x4 matrix multiply: out = a * b
 function multiply(a, b) {
   const out = new Float32Array(16);
 
-  for (let i = 0; i < 4; i++) {
-    for (let j = 0; j < 4; j++) {
-      out[i + j * 4] =
-        a[0 + j * 4] * b[i + 0 * 4] +
-        a[1 + j * 4] * b[i + 1 * 4] +
-        a[2 + j * 4] * b[i + 2 * 4] +
-        a[3 + j * 4] * b[i + 3 * 4];
+  for (let col = 0; col < 4; col++) {
+    for (let row = 0; row < 4; row++) {
+      out[col * 4 + row] =
+        a[0 * 4 + row] * b[col * 4 + 0] +
+        a[1 * 4 + row] * b[col * 4 + 1] +
+        a[2 * 4 + row] * b[col * 4 + 2] +
+        a[3 * 4 + row] * b[col * 4 + 3];
     }
   }
 
@@ -134,39 +143,27 @@ function multiply(a, b) {
 }
 
 function perspective(fov, aspect, near, far) {
-  const f = 1.0 / Math.tan(fov / 2);
+  const f = 1 / Math.tan(fov / 2);
   const nf = 1 / (near - far);
 
   return new Float32Array([
     f / aspect, 0, 0, 0,
     0, f, 0, 0,
     0, 0, (far + near) * nf, -1,
-    0, 0, 2 * far * near * nf, 0,
+    0, 0, (2 * far * near) * nf, 0
   ]);
 }
 
-function translate(z) {
+function translation(tx, ty, tz) {
   return new Float32Array([
     1, 0, 0, 0,
     0, 1, 0, 0,
     0, 0, 1, 0,
-    0, 0, z, 1,
+    tx, ty, tz, 1
   ]);
 }
 
-function rotateY(angle) {
-  const c = Math.cos(angle);
-  const s = Math.sin(angle);
-
-  return new Float32Array([
-    c, 0, -s, 0,
-    0, 1, 0, 0,
-    s, 0, c, 0,
-    0, 0, 0, 1,
-  ]);
-}
-
-function rotateX(angle) {
+function rotationX(angle) {
   const c = Math.cos(angle);
   const s = Math.sin(angle);
 
@@ -174,7 +171,19 @@ function rotateX(angle) {
     1, 0, 0, 0,
     0, c, s, 0,
     0, -s, c, 0,
-    0, 0, 0, 1,
+    0, 0, 0, 1
+  ]);
+}
+
+function rotationY(angle) {
+  const c = Math.cos(angle);
+  const s = Math.sin(angle);
+
+  return new Float32Array([
+    c, 0, -s, 0,
+    0, 1, 0, 0,
+    s, 0, c, 0,
+    0, 0, 0, 1
   ]);
 }
 
@@ -182,7 +191,7 @@ window.addEventListener("resize", resizeCanvas);
 resizeCanvas();
 
 gl.enable(gl.DEPTH_TEST);
-gl.useProgram(program);
+gl.disable(gl.CULL_FACE);
 
 function render(time) {
   const t = time * 0.001;
@@ -195,14 +204,13 @@ function render(time) {
   const aspect = canvas.width / canvas.height;
 
   const p = perspective(Math.PI / 3, aspect, 0.1, 100);
-  const tr = translate(-3);
-  const rx = rotateX(t * 0.7);
-  const ry = rotateY(t * 1.2);
+  const tr = translation(0, 0, -3);
+  const rx = rotationX(t * 0.8);
+  const ry = rotationY(t * 1.2);
 
-  let matrix = p;
-  matrix = multiply(matrix, tr);
-  matrix = multiply(matrix, rx);
+  let matrix = multiply(p, tr);
   matrix = multiply(matrix, ry);
+  matrix = multiply(matrix, rx);
 
   gl.uniformMatrix4fv(uMatrix, false, matrix);
   gl.drawArrays(gl.TRIANGLES, 0, vertices.length / 6);
